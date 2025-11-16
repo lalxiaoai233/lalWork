@@ -1,0 +1,331 @@
+_base_: [
+    '../../default.yaml',
+    '../default.yaml',
+    'default.yaml',
+]
+
+# ==============================================================================
+# 模型配置 - CBDES MoE (基于分布专家混合架构)
+# ==============================================================================
+# 本配置使用BEVFusion模型架构，结合CBDES MoE作为骨干网络
+# CBDES MoE包含4个异构专家网络（Swin, ResNet, ConvNeXt, PVT）
+# 通过自注意力路由器动态选择和组合专家网络
+model:
+  type: BEVFusion  # BEV融合模型
+  encoders:
+    lidar: null  # 不使用LiDAR编码器（仅相机模式）
+    camera:
+      backbone:
+        type: CBDESMoE  # CBDES混合专家网络骨干
+        in_channels: 3  # RGB图像输入通道数
+        out_indices: [1, 2, 3]  # 输出多尺度特征图的stage索引
+        
+        # ======================================================================
+        # CBDES MoE 专家网络配置（4个异构专家）
+        # ======================================================================
+        expert_configs:
+          # Swin Transformer专家 - 基于窗口的自注意力机制
+          swin:
+            type: SwinTransformer
+            embed_dims: 96  # 嵌入维度
+            depths: [2, 2, 6, 2]  # 各stage的block数量
+            num_heads: [3, 6, 12, 24]  # 各stage的注意力头数
+            window_size: 7  # 自注意力窗口大小
+            mlp_ratio: 4  # MLP扩展比率
+            qkv_bias: true  # QKV投影是否使用偏置
+            qk_scale: null  # QK缩放因子（null表示自动计算）
+            drop_rate: 0.  # Dropout比率
+            attn_drop_rate: 0.  # 注意力层Dropout比率
+            drop_path_rate: 0.3  # 随机深度比率
+            patch_norm: true  # 是否使用patch归一化
+            out_indices: [1, 2, 3]  # 输出特征图的stage索引
+            with_cp: false  # 是否使用梯度检查点（节省内存）
+            convert_weights: true  # 是否转换预训练权重
+            pretrained: pretrained_weights/swin_tiny_patch4_window7_224.pth  # Swin预训练权重路径
+          
+          # ResNet50专家 - 经典卷积网络架构
+          resnet:
+            type: ResNet
+            depth: 50  # ResNet层数（50层）
+            num_stages: 4  # ResNet stage数量
+            out_indices: [1, 2, 3]  # 输出特征图的stage索引
+            norm_cfg:
+              type: BN2d  # 2D批归一化
+              requires_grad: true  # 归一化层是否需要梯度
+            norm_eval: false  # 是否在评估模式下冻结归一化层
+            pretrained: torchvision  # 使用torchvision预训练的ResNet50
+          
+          # ConvNeXt专家 - 现代卷积网络架构
+          convnext:
+            type: ConvNeXtExpert
+            depths: [3, 3, 9, 3]  # 各stage的block数量
+            dims: [96, 192, 384, 768]  # 各stage的特征维度
+            drop_path_rate: 0.  # 随机深度比率
+            layer_scale_init_value: 0.000001  # 层缩放初始化值
+            out_indices: [1, 2, 3]  # 输出特征图的stage索引
+            pretrained: pretrained_weights/convnext_tiny_1k_224_ema.pth  # ConvNeXt预训练权重路径
+          
+          # PVT (Pyramid Vision Transformer)专家 - 金字塔视觉Transformer
+          pvt:
+            type: PyramidVisionTransformerExpert
+            embed_dims: [64, 128, 320, 512]  # 各stage的嵌入维度
+            depths: [3, 4, 6, 3]  # 各stage的block数量
+            num_heads: [1, 2, 5, 8]  # 各stage的注意力头数
+            mlp_ratios: [8, 8, 4, 4]  # 各stage的MLP扩展比率
+            sr_ratios: [8, 4, 2, 1]  # 各stage的空间下采样比率
+            out_indices: [1, 2, 3]  # 输出特征图的stage索引
+            pretrained: pretrained_weights/pvt_v2_b2.pth  # PVT预训练权重路径
+        
+        # ======================================================================
+        # 自注意力路由器配置（SAR）
+        # ======================================================================
+        # SAR模块接收原始输入图像，通过三步卷积池化提取特征用于专家选择
+        router_config:
+          input_dim: 3  # 输入图像通道数（RGB图像为3）
+          num_experts: 4  # 专家网络数量（swin, resnet, convnext, pvt）
+          embedding_dim: 128  # 路由器嵌入维度（自注意力后的token维度）
+          num_heads: 8  # 多头注意力头数
+          dropout: 0.1  # Dropout比率
+      
+      # ======================================================================
+      # 特征金字塔网络（Neck）
+      # ======================================================================
+      neck:
+        type: GeneralizedLSSFPN  # LSS特征金字塔网络（通用版本）
+        in_channels: [256, 256, 256]  # 与CBDESMoE输出对齐
+        out_channels: 256  # 输出通道数（统一到256维）
+        start_level: 0  # 开始融合的level索引
+        num_outs: 3  # 输出的特征图数量
+        norm_cfg:
+          type: BN2d  # 2D批归一化
+          requires_grad: true  # 需要计算梯度
+        act_cfg:
+          type: ReLU  # ReLU激活函数
+          inplace: true  # 原地激活（节省内存）
+        upsample_cfg:
+          mode: bilinear  # 双线性插值上采样
+          align_corners: false  # 不对齐角点
+      
+      # ======================================================================
+      # 视图变换（View Transform）- 相机到BEV空间的变换
+      # ======================================================================
+      vtransform:
+        type: LSSTransform  # LSS视图变换
+        in_channels: 256  # 输入特征通道数
+        out_channels: 80  # 输出BEV特征通道数
+        image_size: [256, 704]  # 图像尺寸 [高度, 宽度]
+        feature_size: [32, 88]  # 特征图尺寸 [高度, 宽度]
+        xbound: [-51.2, 51.2, 0.4]  # X轴边界 [最小值, 最大值, 分辨率]
+        ybound: [-51.2, 51.2, 0.4]  # Y轴边界 [最小值, 最大值, 分辨率]
+        zbound: [-10.0, 10.0, 20.0]  # Z轴边界 [最小值, 最大值, 分辨率]
+        dbound: [1.0, 60.0, 0.5]  # 深度边界 [最小值, 最大值, 分辨率]
+        downsample: 2  # 下采样倍数
+  
+  fuser: null  # 不使用多模态融合器（单模态）
+  
+  # ======================================================================
+  # 解码器配置 - 用于分割任务的解码器
+  # ======================================================================
+  decoder:
+    backbone:
+      type: GeneralizedResNet  # 通用ResNet骨干
+      in_channels: 80  # BEV特征输入通道数
+      blocks:
+        - [2, 160, 2]  # [block数量, 输出通道, stride]
+        - [2, 320, 2]
+        - [2, 640, 1]
+    neck:
+      type: LSSFPN  # LSS特征金字塔网络
+      in_indices: [-1, 0]  # 输入特征图索引（最后和第一个）
+      in_channels: [640, 160]  # 输入通道数
+      out_channels: 256  # 输出通道数
+      scale_factor: 2  # 上采样倍数
+
+# ==============================================================================
+# 优化器配置
+# ==============================================================================
+optimizer:
+  type: AdamW  # AdamW优化器（带权重衰减的Adam）
+  lr: 1.0e-4  # 学习率
+  weight_decay: 0.01  # 权重衰减系数
+
+optimizer_config:
+  grad_clip:  # 梯度裁剪
+    max_norm: 35  # 最大梯度范数
+    norm_type: 2  # L2范数
+
+lr_config:
+  policy: cyclic  # 循环学习率策略
+
+momentum_config:
+  policy: cyclic  # 循环动量策略
+
+custom_imports:
+  imports: ['mmdet3d.datasets.pipelines.cbdes_safe']
+  allow_failed_imports: False
+
+# DDP 设置：MoE 可能导致部分参数在单次前向未被使用
+find_unused_parameters: True
+
+# 覆盖数据流水线：在增强前清理无效 radar，占位 location 时使用安全 BEV 分割加载
+train_pipeline:
+  - type: LoadMultiViewImageFromFiles
+    to_float32: true
+  - type: LoadPointsFromFile
+    coord_type: LIDAR
+    load_dim: 5
+    use_dim: 5
+    reduce_beams: 32
+    load_augmented: null
+  - type: LoadPointsFromMultiSweeps
+    sweeps_num: 9
+    load_dim: 5
+    use_dim: 5
+    reduce_beams: 32
+    pad_empty_sweeps: true
+    remove_close: true
+    load_augmented: null
+  - type: LoadAnnotations3D
+    with_bbox_3d: true
+    with_label_3d: true
+    with_attr_label: false
+  - type: ObjectPaste
+    stop_epoch: -1
+    db_sampler:
+      dataset_root: data/nuscenes/
+      info_path: data/nuscenes/nuscenes_dbinfos_train.pkl
+      rate: 1.0
+      prepare:
+        filter_by_difficulty: [-1]
+        filter_by_min_points:
+          car: 5
+          truck: 5
+          bus: 5
+          trailer: 5
+          construction_vehicle: 5
+          traffic_cone: 5
+          barrier: 5
+          motorcycle: 5
+          bicycle: 5
+          pedestrian: 5
+      classes: ['car','truck','construction_vehicle','bus','trailer','barrier','motorcycle','bicycle','pedestrian','traffic_cone']
+      sample_groups:
+        car: 2
+        truck: 3
+        construction_vehicle: 7
+        bus: 4
+        trailer: 6
+        barrier: 2
+        motorcycle: 6
+        bicycle: 6
+        pedestrian: 2
+        traffic_cone: 2
+      points_loader:
+        type: LoadPointsFromFile
+        coord_type: LIDAR
+        load_dim: 5
+        use_dim: 5
+        reduce_beams: 32
+  - type: RadarSanitize
+  - type: ImageAug3D
+    final_dim: [256, 704]
+    resize_lim: [0.38, 0.55]
+    bot_pct_lim: [0.0, 0.0]
+    rot_lim: [-5.4, 5.4]
+    rand_flip: true
+    is_train: true
+  - type: GlobalRotScaleTrans
+    resize_lim: [0.9, 1.1]
+    rot_lim: [-0.785, 0.785]
+    trans_lim: 0.5
+    is_train: true
+  - type: LoadBEVSegmentationSafe
+    dataset_root: data/nuscenes/
+    xbound: [-50.0, 50.0, 0.5]
+    ybound: [-50.0, 50.0, 0.5]
+    classes: ['drivable_area','ped_crossing','walkway','stop_line','carpark_area','divider']
+  - type: RandomFlip3D
+  - type: PointsRangeFilter
+    point_cloud_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+  - type: ObjectRangeFilter
+    point_cloud_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+  - type: ObjectNameFilter
+    classes: ['car','truck','construction_vehicle','bus','trailer','barrier','motorcycle','bicycle','pedestrian','traffic_cone']
+  - type: ImageNormalize
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+  - type: GridMask
+    use_h: true
+    use_w: true
+    max_epoch: 6
+    rotate: 1
+    offset: false
+    ratio: 0.5
+    mode: 1
+    prob: 0.0
+    fixed_prob: true
+  - type: PointShuffle
+  - type: DefaultFormatBundle3D
+    classes: ['car','truck','construction_vehicle','bus','trailer','barrier','motorcycle','bicycle','pedestrian','traffic_cone']
+  - type: Collect3D
+    keys: ['img','points','gt_bboxes_3d','gt_labels_3d','gt_masks_bev']
+    meta_keys: ['camera_intrinsics','camera2ego','lidar2ego','lidar2camera','camera2lidar','lidar2image','img_aug_matrix','lidar_aug_matrix']
+  - type: GTDepth
+    keyframe_only: true
+
+test_pipeline:
+  - type: LoadMultiViewImageFromFiles
+    to_float32: true
+  - type: LoadPointsFromFile
+    coord_type: LIDAR
+    load_dim: 5
+    use_dim: 5
+    reduce_beams: 32
+    load_augmented: null
+  - type: LoadPointsFromMultiSweeps
+    sweeps_num: 9
+    load_dim: 5
+    use_dim: 5
+    reduce_beams: 32
+    pad_empty_sweeps: true
+    remove_close: true
+    load_augmented: null
+  - type: LoadAnnotations3D
+    with_bbox_3d: true
+    with_label_3d: true
+    with_attr_label: false
+  - type: ImageAug3D
+    final_dim: [256, 704]
+    resize_lim: [0.48, 0.48]
+    bot_pct_lim: [0.0, 0.0]
+    rot_lim: [0.0, 0.0]
+    rand_flip: false
+    is_train: false
+  - type: GlobalRotScaleTrans
+    resize_lim: [1.0, 1.0]
+    rot_lim: [0.0, 0.0]
+    trans_lim: 0.0
+    is_train: false
+  - type: LoadBEVSegmentationSafe
+    dataset_root: data/nuscenes/
+    xbound: [-50.0, 50.0, 0.5]
+    ybound: [-50.0, 50.0, 0.5]
+    classes: ['drivable_area','ped_crossing','walkway','stop_line','carpark_area','divider']
+  - type: PointsRangeFilter
+    point_cloud_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+  - type: ImageNormalize
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+  - type: DefaultFormatBundle3D
+    classes: ['car','truck','construction_vehicle','bus','trailer','barrier','motorcycle','bicycle','pedestrian','traffic_cone']
+  - type: Collect3D
+    keys: ['img','points','gt_bboxes_3d','gt_labels_3d','gt_masks_bev']
+    meta_keys: ['camera_intrinsics','camera2ego','lidar2ego','lidar2camera','camera2lidar','lidar2image','img_aug_matrix','lidar_aug_matrix']
+  - type: GTDepth
+    keyframe_only: true
+
+val_pipeline: ${test_pipeline}
+
+# 覆盖批大小，降低显存占用
+data:
+  samples_per_gpu: 1

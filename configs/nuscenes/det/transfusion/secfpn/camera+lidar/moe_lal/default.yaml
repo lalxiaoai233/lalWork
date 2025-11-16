@@ -1,0 +1,138 @@
+model:
+  type: CBDESBEVFusion  # 使用CBDESBEVFusion模型以支持CBDESMoE backbone
+  use_cbdes_moe: true  # 打开MoE
+  cbdes_moe_config:  # 保留MoE配置，方便随时重新启用
+    in_channels: 3
+    out_indices: [1, 2, 3]
+    expert_configs:
+      swin:
+        type: SwinTransformer
+        embed_dims: 96
+        depths: [2, 2, 6, 2]
+        num_heads: [3, 6, 12, 24]
+        window_size: 7
+        mlp_ratio: 4
+        qkv_bias: true
+        qk_scale: null
+        drop_rate: 0.
+        attn_drop_rate: 0.
+        drop_path_rate: 0.3
+        patch_norm: true
+        out_indices: [1, 2, 3]
+        with_cp: false
+        convert_weights: true
+        pretrained: pretrained_weights/swin_tiny_patch4_window7_224.pth
+      resnet:
+        type: ResNet
+        depth: 50
+        num_stages: 4
+        out_indices: [1, 2, 3]
+        norm_cfg:
+          type: BN2d
+          requires_grad: true
+        norm_eval: false
+        pretrained: torchvision
+      convnext:
+        type: ConvNeXtExpert
+        depths: [3, 3, 9, 3]
+        dims: [96, 192, 384, 768]
+        drop_path_rate: 0.
+        layer_scale_init_value: 0.000001
+        out_indices: [1, 2, 3]
+        pretrained: pretrained_weights/convnext_tiny_1k_224_ema.pth
+      pvt:
+        type: PyramidVisionTransformerExpert
+        embed_dims: [64, 128, 320, 512]
+        depths: [3, 4, 6, 3]
+        num_heads: [1, 2, 5, 8]
+        mlp_ratios: [8, 8, 4, 4]
+        sr_ratios: [8, 4, 2, 1]
+        out_indices: [1, 2, 3]
+        pretrained: pretrained_weights/pvt_v2_b2.pth
+    router_config:
+      input_dim: 3
+      num_experts: 4
+      embedding_dim: 128
+      num_heads: 8
+      dropout: 0.1
+  encoders:
+    camera:
+      backbone:
+        type: SwinTransformer
+        embed_dims: 96
+        depths: [2, 2, 6, 2]
+        num_heads: [3, 6, 12, 24]
+        window_size: 7
+        mlp_ratio: 4
+        qkv_bias: true
+        qk_scale: null
+        drop_rate: 0.
+        attn_drop_rate: 0.
+        drop_path_rate: 0.3
+        patch_norm: true
+        out_indices: [1, 2, 3]
+        with_cp: false
+        convert_weights: true
+        pretrained: pretrained_weights/swin_tiny_patch4_window7_224.pth
+      neck:
+        type: GeneralizedLSSFPN
+        # in_channels必须与backbone的out_indices数量匹配
+        in_channels: [192, 384, 768]  # Swin各层输出通道
+        out_channels: 256
+        start_level: 0
+        num_outs: 3
+        norm_cfg:
+          type: BN2d
+          requires_grad: true
+        act_cfg:
+          type: ReLU
+          inplace: true
+        upsample_cfg:
+          mode: bilinear
+          align_corners: false
+      vtransform:
+        type: DepthLSSTransform
+        in_channels: 256
+        out_channels: 64
+        image_size: ${image_size}
+        feature_size: ${[image_size[0] // 8, image_size[1] // 8]}
+        xbound: [-51.2, 51.2, 0.4]
+        ybound: [-51.2, 51.2, 0.4]
+        zbound: [-10.0, 10.0, 20.0]
+        dbound: [1.0, 60.0, 0.5]
+        downsample: 2
+    lidar:
+      voxelize:
+        # max_num_points: 10
+        point_cloud_range: ${point_cloud_range}
+        voxel_size: ${voxel_size}
+        max_voxels: [120000, 160000]
+      backbone:
+        type: SparseEncoder
+        in_channels: 5
+        sparse_shape: [1024, 1024, 41]
+        output_channels: 128
+        order:
+          - conv
+          - norm
+          - act
+        encoder_channels:
+          - [16, 16, 32]
+          - [32, 32, 64]
+          - [64, 64, 128]
+          - [128, 128]
+        encoder_paddings:
+          - [0, 0, 1]
+          - [0, 0, 1]
+          - [0, 0, [1, 1, 0]]
+          - [0, 0]
+        block_type: basicblock
+
+lr_config: null
+
+optimizer:
+  lr: 1.0e-4
+
+max_epochs: 6
+
+find_unused_parameters: true

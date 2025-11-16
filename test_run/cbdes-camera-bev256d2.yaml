@@ -1,0 +1,642 @@
+clear: !!python/name:None.clear
+copy: !!python/name:None.copy
+dict: !!python/object/apply:builtins.getattr
+- &id001 !!python/object/new:torchpack.utils.config.Config
+  dictitems:
+    _base_:
+    - ../../default.yaml
+    - ../default.yaml
+    - default.yaml
+    augment2d: !!python/object/new:torchpack.utils.config.Config
+      dictitems:
+        gridmask: !!python/object/new:torchpack.utils.config.Config
+          dictitems:
+            fixed_prob: true
+            prob: 0.0
+        resize:
+        - - 0.38
+          - 0.55
+        - - 0.48
+          - 0.48
+        rotate:
+        - -5.4
+        - 5.4
+    augment3d: !!python/object/new:torchpack.utils.config.Config
+      dictitems:
+        rotate:
+        - -0.785
+        - 0.785
+        scale:
+        - 0.9
+        - 1.1
+        translate: 0.5
+    checkpoint_config: !!python/object/new:torchpack.utils.config.Config
+      dictitems:
+        interval: 1
+        max_keep_ckpts: 1
+    cudnn_benchmark: false
+    data: !!python/object/new:torchpack.utils.config.Config
+      dictitems:
+        samples_per_gpu: 4
+        test: !!python/object/new:torchpack.utils.config.Config
+          dictitems:
+            ann_file: ${dataset_root + "nuscenes_infos_val.pkl"}
+            box_type_3d: LiDAR
+            dataset_root: ${dataset_root}
+            map_classes: ${map_classes}
+            modality: ${input_modality}
+            object_classes: ${object_classes}
+            pipeline: ${test_pipeline}
+            test_mode: true
+            type: ${dataset_type}
+        train: !!python/object/new:torchpack.utils.config.Config
+          dictitems:
+            dataset: !!python/object/new:torchpack.utils.config.Config
+              dictitems:
+                ann_file: ${dataset_root + "nuscenes_infos_train.pkl"}
+                box_type_3d: LiDAR
+                dataset_root: ${dataset_root}
+                map_classes: ${map_classes}
+                modality: ${input_modality}
+                object_classes: ${object_classes}
+                pipeline: ${train_pipeline}
+                test_mode: false
+                type: ${dataset_type}
+                use_valid_flag: true
+            type: CBGSDataset
+        val: !!python/object/new:torchpack.utils.config.Config
+          dictitems:
+            ann_file: ${dataset_root + "nuscenes_infos_val.pkl"}
+            box_type_3d: LiDAR
+            dataset_root: ${dataset_root}
+            map_classes: ${map_classes}
+            modality: ${input_modality}
+            object_classes: ${object_classes}
+            pipeline: ${test_pipeline}
+            test_mode: false
+            type: ${dataset_type}
+        workers_per_gpu: 4
+    dataset_root: data/nuscenes/
+    dataset_type: NuScenesDataset
+    deterministic: false
+    evaluation: !!python/object/new:torchpack.utils.config.Config
+      dictitems:
+        interval: 1
+        pipeline: ${test_pipeline}
+    fp16: !!python/object/new:torchpack.utils.config.Config
+      dictitems:
+        loss_scale: !!python/object/new:torchpack.utils.config.Config
+          dictitems:
+            growth_interval: 2000
+    gt_paste_stop_epoch: -1
+    image_size:
+    - 256
+    - 704
+    input_modality: !!python/object/new:torchpack.utils.config.Config
+      dictitems:
+        use_camera: true
+        use_external: false
+        use_lidar: true
+        use_map: false
+        use_radar: false
+    load_augmented: null
+    load_dim: 5
+    load_from: null
+    log_config: !!python/object/new:torchpack.utils.config.Config
+      dictitems:
+        hooks:
+        - type: TextLoggerHook
+        - type: TensorboardLoggerHook
+        interval: 50
+    lr_config: !!python/object/new:torchpack.utils.config.Config
+      dictitems:
+        policy: cyclic
+    map_classes:
+    - drivable_area
+    - ped_crossing
+    - walkway
+    - stop_line
+    - carpark_area
+    - divider
+    max_epochs: 1
+    model: !!python/object/new:torchpack.utils.config.Config
+      dictitems:
+        decoder: !!python/object/new:torchpack.utils.config.Config
+          dictitems:
+            backbone: !!python/object/new:torchpack.utils.config.Config
+              dictitems:
+                blocks:
+                - - 2
+                  - 160
+                  - 2
+                - - 2
+                  - 320
+                  - 2
+                - - 2
+                  - 640
+                  - 1
+                in_channels: 80
+                type: GeneralizedResNet
+            neck: !!python/object/new:torchpack.utils.config.Config
+              dictitems:
+                in_channels:
+                - 640
+                - 160
+                in_indices:
+                - -1
+                - 0
+                out_channels: 256
+                scale_factor: 2
+                type: LSSFPN
+        encoders: !!python/object/new:torchpack.utils.config.Config
+          dictitems:
+            camera: !!python/object/new:torchpack.utils.config.Config
+              dictitems:
+                backbone: !!python/object/new:torchpack.utils.config.Config
+                  dictitems:
+                    expert_configs: !!python/object/new:torchpack.utils.config.Config
+                      dictitems:
+                        convnext: !!python/object/new:torchpack.utils.config.Config
+                          dictitems:
+                            depths:
+                            - 3
+                            - 3
+                            - 9
+                            - 3
+                            dims:
+                            - 96
+                            - 192
+                            - 384
+                            - 768
+                            drop_path_rate: 0.0
+                            layer_scale_init_value: 1.0e-06
+                            out_indices:
+                            - 1
+                            - 2
+                            - 3
+                            pretrained: pretrained_weights/convnext_tiny_1k_224_ema.pth
+                            type: ConvNeXtExpert
+                        pvt: !!python/object/new:torchpack.utils.config.Config
+                          dictitems:
+                            depths:
+                            - 3
+                            - 4
+                            - 6
+                            - 3
+                            embed_dims:
+                            - 64
+                            - 128
+                            - 320
+                            - 512
+                            mlp_ratios:
+                            - 8
+                            - 8
+                            - 4
+                            - 4
+                            num_heads:
+                            - 1
+                            - 2
+                            - 5
+                            - 8
+                            out_indices:
+                            - 1
+                            - 2
+                            - 3
+                            pretrained: pretrained_weights/pvt_v2_b2.pth
+                            sr_ratios:
+                            - 8
+                            - 4
+                            - 2
+                            - 1
+                            type: PyramidVisionTransformerExpert
+                        resnet: !!python/object/new:torchpack.utils.config.Config
+                          dictitems:
+                            depth: 50
+                            norm_cfg: !!python/object/new:torchpack.utils.config.Config
+                              dictitems:
+                                requires_grad: true
+                                type: BN2d
+                            norm_eval: false
+                            num_stages: 4
+                            out_indices:
+                            - 1
+                            - 2
+                            - 3
+                            pretrained: torchvision
+                            type: ResNet
+                        swin: !!python/object/new:torchpack.utils.config.Config
+                          dictitems:
+                            attn_drop_rate: 0.0
+                            convert_weights: true
+                            depths:
+                            - 2
+                            - 2
+                            - 6
+                            - 2
+                            drop_path_rate: 0.3
+                            drop_rate: 0.0
+                            embed_dims: 96
+                            mlp_ratio: 4
+                            num_heads:
+                            - 3
+                            - 6
+                            - 12
+                            - 24
+                            out_indices:
+                            - 1
+                            - 2
+                            - 3
+                            patch_norm: true
+                            pretrained: pretrained_weights/swin_tiny_patch4_window7_224.pth
+                            qk_scale: null
+                            qkv_bias: true
+                            type: SwinTransformer
+                            window_size: 7
+                            with_cp: false
+                    in_channels: 3
+                    out_indices:
+                    - 1
+                    - 2
+                    - 3
+                    router_config: !!python/object/new:torchpack.utils.config.Config
+                      dictitems:
+                        dropout: 0.1
+                        embedding_dim: 128
+                        input_dim: 3
+                        num_experts: 4
+                        num_heads: 8
+                    type: CBDESMoE
+                neck: !!python/object/new:torchpack.utils.config.Config
+                  dictitems:
+                    act_cfg: !!python/object/new:torchpack.utils.config.Config
+                      dictitems:
+                        inplace: true
+                        type: ReLU
+                    in_channels:
+                    - 192
+                    - 384
+                    - 768
+                    norm_cfg: !!python/object/new:torchpack.utils.config.Config
+                      dictitems:
+                        requires_grad: true
+                        type: BN2d
+                    num_outs: 3
+                    out_channels: 256
+                    start_level: 0
+                    type: GeneralizedLSSFPN
+                    upsample_cfg: !!python/object/new:torchpack.utils.config.Config
+                      dictitems:
+                        align_corners: false
+                        mode: bilinear
+                vtransform: !!python/object/new:torchpack.utils.config.Config
+                  dictitems:
+                    dbound:
+                    - 1.0
+                    - 60.0
+                    - 0.5
+                    downsample: 2
+                    feature_size:
+                    - 32
+                    - 88
+                    image_size:
+                    - 256
+                    - 704
+                    in_channels: 256
+                    out_channels: 80
+                    type: LSSTransform
+                    xbound:
+                    - -51.2
+                    - 51.2
+                    - 0.4
+                    ybound:
+                    - -51.2
+                    - 51.2
+                    - 0.4
+                    zbound:
+                    - -10.0
+                    - 10.0
+                    - 20.0
+            lidar: null
+        fuser: null
+        heads: !!python/object/new:torchpack.utils.config.Config
+          dictitems:
+            map: !!python/object/new:torchpack.utils.config.Config
+              dictitems:
+                classes: ${map_classes}
+                grid_transform: !!python/object/new:torchpack.utils.config.Config
+                  dictitems:
+                    input_scope:
+                    - - -51.2
+                      - 51.2
+                      - 0.8
+                    - - -51.2
+                      - 51.2
+                      - 0.8
+                    output_scope:
+                    - - -50
+                      - 50
+                      - 0.5
+                    - - -50
+                      - 50
+                      - 0.5
+                in_channels: 256
+                loss: focal
+                type: BEVSegmentationHead
+            object: null
+        type: BEVFusion
+    momentum_config: !!python/object/new:torchpack.utils.config.Config
+      dictitems:
+        policy: cyclic
+    object_classes:
+    - car
+    - truck
+    - construction_vehicle
+    - bus
+    - trailer
+    - barrier
+    - motorcycle
+    - bicycle
+    - pedestrian
+    - traffic_cone
+    optimizer: !!python/object/new:torchpack.utils.config.Config
+      dictitems:
+        lr: 0.0001
+        paramwise_cfg: !!python/object/new:torchpack.utils.config.Config
+          dictitems:
+            custom_keys: !!python/object/new:torchpack.utils.config.Config
+              dictitems:
+                absolute_pos_embed: !!python/object/new:torchpack.utils.config.Config
+                  dictitems:
+                    decay_mult: 0
+                relative_position_bias_table: !!python/object/new:torchpack.utils.config.Config
+                  dictitems:
+                    decay_mult: 0
+        type: AdamW
+        weight_decay: 0.01
+    optimizer_config: !!python/object/new:torchpack.utils.config.Config
+      dictitems:
+        grad_clip: !!python/object/new:torchpack.utils.config.Config
+          dictitems:
+            max_norm: 35
+            norm_type: 2
+    point_cloud_range:
+    - -51.2
+    - -51.2
+    - -5.0
+    - 51.2
+    - 51.2
+    - 3.0
+    reduce_beams: 32
+    resume_from: null
+    runner: !!python/object/new:torchpack.utils.config.Config
+      dictitems:
+        max_epochs: ${max_epochs}
+        type: CustomEpochBasedRunner
+    seed: 0
+    test_pipeline:
+    - to_float32: true
+      type: LoadMultiViewImageFromFiles
+    - coord_type: LIDAR
+      load_augmented: ${load_augmented}
+      load_dim: ${load_dim}
+      reduce_beams: ${reduce_beams}
+      type: LoadPointsFromFile
+      use_dim: ${use_dim}
+    - load_augmented: ${load_augmented}
+      load_dim: ${load_dim}
+      pad_empty_sweeps: true
+      reduce_beams: ${reduce_beams}
+      remove_close: true
+      sweeps_num: 9
+      type: LoadPointsFromMultiSweeps
+      use_dim: ${use_dim}
+    - type: LoadAnnotations3D
+      with_attr_label: false
+      with_bbox_3d: true
+      with_label_3d: true
+    - bot_pct_lim:
+      - 0.0
+      - 0.0
+      final_dim: ${image_size}
+      is_train: false
+      rand_flip: false
+      resize_lim: ${augment2d.resize[1]}
+      rot_lim:
+      - 0.0
+      - 0.0
+      type: ImageAug3D
+    - is_train: false
+      resize_lim:
+      - 1.0
+      - 1.0
+      rot_lim:
+      - 0.0
+      - 0.0
+      trans_lim: 0.0
+      type: GlobalRotScaleTrans
+    - classes: ${map_classes}
+      dataset_root: ${dataset_root}
+      type: LoadBEVSegmentation
+      xbound:
+      - -50.0
+      - 50.0
+      - 0.5
+      ybound:
+      - -50.0
+      - 50.0
+      - 0.5
+    - point_cloud_range: ${point_cloud_range}
+      type: PointsRangeFilter
+    - mean:
+      - 0.485
+      - 0.456
+      - 0.406
+      std:
+      - 0.229
+      - 0.224
+      - 0.225
+      type: ImageNormalize
+    - classes: ${object_classes}
+      type: DefaultFormatBundle3D
+    - keys:
+      - img
+      - points
+      - gt_bboxes_3d
+      - gt_labels_3d
+      - gt_masks_bev
+      meta_keys:
+      - camera_intrinsics
+      - camera2ego
+      - lidar2ego
+      - lidar2camera
+      - camera2lidar
+      - lidar2image
+      - img_aug_matrix
+      - lidar_aug_matrix
+      type: Collect3D
+    - keyframe_only: true
+      type: GTDepth
+    train_pipeline:
+    - to_float32: true
+      type: LoadMultiViewImageFromFiles
+    - coord_type: LIDAR
+      load_augmented: ${load_augmented}
+      load_dim: ${load_dim}
+      reduce_beams: ${reduce_beams}
+      type: LoadPointsFromFile
+      use_dim: ${use_dim}
+    - load_augmented: ${load_augmented}
+      load_dim: ${load_dim}
+      pad_empty_sweeps: true
+      reduce_beams: ${reduce_beams}
+      remove_close: true
+      sweeps_num: 9
+      type: LoadPointsFromMultiSweeps
+      use_dim: ${use_dim}
+    - type: LoadAnnotations3D
+      with_attr_label: false
+      with_bbox_3d: true
+      with_label_3d: true
+    - db_sampler:
+        classes: ${object_classes}
+        dataset_root: ${dataset_root}
+        info_path: ${dataset_root + "nuscenes_dbinfos_train.pkl"}
+        points_loader:
+          coord_type: LIDAR
+          load_dim: ${load_dim}
+          reduce_beams: ${reduce_beams}
+          type: LoadPointsFromFile
+          use_dim: ${use_dim}
+        prepare:
+          filter_by_difficulty:
+          - -1
+          filter_by_min_points:
+            barrier: 5
+            bicycle: 5
+            bus: 5
+            car: 5
+            construction_vehicle: 5
+            motorcycle: 5
+            pedestrian: 5
+            traffic_cone: 5
+            trailer: 5
+            truck: 5
+        rate: 1.0
+        sample_groups:
+          barrier: 2
+          bicycle: 6
+          bus: 4
+          car: 2
+          construction_vehicle: 7
+          motorcycle: 6
+          pedestrian: 2
+          traffic_cone: 2
+          trailer: 6
+          truck: 3
+      stop_epoch: ${gt_paste_stop_epoch}
+      type: ObjectPaste
+    - bot_pct_lim:
+      - 0.0
+      - 0.0
+      final_dim: ${image_size}
+      is_train: true
+      rand_flip: true
+      resize_lim: ${augment2d.resize[0]}
+      rot_lim: ${augment2d.rotate}
+      type: ImageAug3D
+    - is_train: true
+      resize_lim: ${augment3d.scale}
+      rot_lim: ${augment3d.rotate}
+      trans_lim: ${augment3d.translate}
+      type: GlobalRotScaleTrans
+    - classes: ${map_classes}
+      dataset_root: ${dataset_root}
+      type: LoadBEVSegmentation
+      xbound:
+      - -50.0
+      - 50.0
+      - 0.5
+      ybound:
+      - -50.0
+      - 50.0
+      - 0.5
+    - type: RandomFlip3D
+    - point_cloud_range: ${point_cloud_range}
+      type: PointsRangeFilter
+    - point_cloud_range: ${point_cloud_range}
+      type: ObjectRangeFilter
+    - classes: ${object_classes}
+      type: ObjectNameFilter
+    - mean:
+      - 0.485
+      - 0.456
+      - 0.406
+      std:
+      - 0.229
+      - 0.224
+      - 0.225
+      type: ImageNormalize
+    - fixed_prob: ${augment2d.gridmask.fixed_prob}
+      max_epoch: ${max_epochs}
+      mode: 1
+      offset: false
+      prob: ${augment2d.gridmask.prob}
+      ratio: 0.5
+      rotate: 1
+      type: GridMask
+      use_h: true
+      use_w: true
+    - type: PointShuffle
+    - classes: ${object_classes}
+      type: DefaultFormatBundle3D
+    - keys:
+      - img
+      - points
+      - gt_bboxes_3d
+      - gt_labels_3d
+      - gt_masks_bev
+      meta_keys:
+      - camera_intrinsics
+      - camera2ego
+      - lidar2ego
+      - lidar2camera
+      - camera2lidar
+      - lidar2image
+      - img_aug_matrix
+      - lidar_aug_matrix
+      type: Collect3D
+    - keyframe_only: true
+      type: GTDepth
+    use_dim: 5
+    voxel_size:
+    - 0.1
+    - 0.1
+    - 0.2
+- dict
+fromkeys: !!python/name:None.fromkeys
+get: !!python/name:None.get
+gpu_ids: !!python/object/apply:builtins.range
+- 0
+- 1
+- 1
+hash: !!python/object/apply:builtins.getattr
+- *id001
+- hash
+items: !!python/name:None.items
+keys: !!python/name:None.keys
+load: !!python/object/apply:builtins.getattr
+- *id001
+- load
+loss_weights:
+  routing_loss: 0.01
+pop: !!python/name:None.pop
+popitem: !!python/name:None.popitem
+reload: !!python/object/apply:builtins.getattr
+- *id001
+- reload
+setdefault: !!python/name:None.setdefault
+update: !!python/object/apply:builtins.getattr
+- *id001
+- update
+values: !!python/name:None.values
+work_dir: test_run

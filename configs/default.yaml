@@ -1,0 +1,28 @@
+seed: 0                 # 随机种子设为0
+deterministic: false    # 非确定性计算模式
+
+checkpoint_config:
+  interval: 1          # 每1个epoch保存一次检查点
+  max_keep_ckpts: 1    # 最多保留1个最新检查点
+
+log_config:
+  interval: 50
+  hooks:
+    -
+      type: TextLoggerHook  # 文本日志输出到控制台和文件
+    -
+      type: TensorboardLoggerHook  # 生成可视化日志
+
+load_from: null
+resume_from: null
+
+cudnn_benchmark: false
+fp16:
+  loss_scale: 
+    growth_interval: 2000
+
+max_epochs: 6
+#max_epochs: 2 
+runner:
+  type: CustomEpochBasedRunner
+  max_epochs: ${max_epochs}
