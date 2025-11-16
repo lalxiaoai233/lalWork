@@ -70,6 +70,9 @@ class CBDESBEVFusion(Base3DFusionModel):
         cbdes_moe_config: CBDES MoE的配置参数
             - expert_configs: 各专家网络的配置
             - router_config: 路由器的配置
+        routing_loss_weight: 路由损失权重（默认0.01）
+            控制路由损失在总损失中的权重，防止路由损失过大干扰主任务训练
+            建议值：0.01（默认），可根据训练情况调整到0.001-0.1
         **kwargs: 其他配置参数
     """
     
@@ -193,6 +196,12 @@ class CBDESBEVFusion(Base3DFusionModel):
         # CBDESBEVFusion: 累积路由损失用于训练时的负载均衡
         # 这是一个列表，存储每个batch的路由损失
         self.routing_losses = []
+        
+        # ========== 【关键差异点3】路由损失权重 ==========
+        # 控制路由损失在总损失中的权重，防止路由损失过大干扰主任务训练
+        # 默认值0.01，参考 run_cbdes_training.py 中的设置
+        # 可以从配置文件中通过 routing_loss_weight 参数覆盖
+        # self.routing_loss_weight = kwargs.get('routing_loss_weight', 0.01)
         
         # 初始化模型权重
         self.init_weights()
@@ -319,43 +328,43 @@ class CBDESBEVFusion(Base3DFusionModel):
                     img_metas,
                 )
                 return features
-        else:
-            # ========== 回退模式 ==========
-            # 如果未启用CBDES MoE或backbone不是CBDESMoE，使用标准backbone处理
-            # 这与BEVFusion的逻辑完全相同
-            B, N, C, H, W = x.size()
-            x = x.view(B * N, C, H, W)
+        # else:
+        #     # ========== 回退模式 ==========
+        #     # 如果未启用CBDES MoE或backbone不是CBDESMoE，使用标准backbone处理
+        #     # 这与BEVFusion的逻辑完全相同
+        #     B, N, C, H, W = x.size()
+        #     x = x.view(B * N, C, H, W)
             
-            # 使用标准backbone提取特征（不是CBDES MoE）
-            x = self.encoders["camera"]["backbone"](x)
+        #     # 使用标准backbone提取特征（不是CBDES MoE）
+        #     x = self.encoders["camera"]["backbone"](x)
             
-            # 使用neck融合多尺度特征
-            x = self.encoders["camera"]["neck"](x)
-            if not isinstance(x, torch.Tensor):
-                x = x[0]
+        #     # 使用neck融合多尺度特征
+        #     x = self.encoders["camera"]["neck"](x)
+        #     if not isinstance(x, torch.Tensor):
+        #         x = x[0]
             
-            # 恢复批次和相机维度
-            BN, C, H, W = x.size()
-            x = x.view(B, int(BN / B), C, H, W)
+            # # 恢复批次和相机维度
+            # BN, C, H, W = x.size()
+            # x = x.view(B, int(BN / B), C, H, W)
             
-            # 视图变换
-            x = self.encoders["camera"]["vtransform"](
-                x,
-                points,
-                radar_points,
-                camera2ego,
-                lidar2ego,
-                lidar2camera,
-                lidar2image,
-                camera_intrinsics,
-                camera2lidar,
-                img_aug_matrix,
-                lidar_aug_matrix,
-                img_metas,
-                depth_loss=self.use_depth_loss,
-                gt_depths=gt_depths,
-            )
-            return x
+            # # 视图变换
+            # x = self.encoders["camera"]["vtransform"](
+            #     x,
+            #     points,
+            #     radar_points,
+            #     camera2ego,
+            #     lidar2ego,
+            #     lidar2camera,
+            #     lidar2image,
+            #     camera_intrinsics,
+            #     camera2lidar,
+            #     img_aug_matrix,
+            #     lidar_aug_matrix,
+            #     img_metas,
+            #     depth_loss=self.use_depth_loss,
+            #     gt_depths=gt_depths,
+            # )
+            # return x
     
     @force_fp32()
     def voxelize(self, points, sensor):
@@ -634,7 +643,9 @@ class CBDESBEVFusion(Base3DFusionModel):
             if self.routing_losses:
                 # 计算平均路由损失（可能包含多个batch的损失）
                 routing_loss = sum(self.routing_losses) / len(self.routing_losses)
-                outputs['routing_loss'] = routing_loss
+                # 应用路由损失权重，防止路由损失过大干扰主任务训练
+                # 默认权重为0.01，可以将路由损失缩小到原来的1%
+                # outputs['routing_loss'] = routing_loss * self.routing_loss_weight
             
             return outputs
         else:

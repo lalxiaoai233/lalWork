@@ -25,7 +25,7 @@ checkpoint_config:
   max_keep_ckpts: 1
 cudnn_benchmark: false
 data:
-  samples_per_gpu: 4
+  samples_per_gpu: 1
   test:
     ann_file: data/nuscenes/nuscenes_infos_val.pkl
     box_type_3d: LiDAR
@@ -244,7 +244,7 @@ data:
         pad_empty_sweeps: true
         reduce_beams: 32
         remove_close: true
-        sweeps_num: 0
+        sweeps_num: 9
         type: LoadPointsFromMultiSweeps
         use_dim: 5
       - compensate_velocity: true
@@ -801,7 +801,7 @@ input_modality:
   use_radar: false
 load_augmented: null
 load_dim: 5
-load_from: null
+load_from: pretrained/lidar-only-det.pth
 log_config:
   hooks:
   - type: TextLoggerHook
@@ -907,7 +907,7 @@ model:
         - 2
         - 3
         patch_norm: true
-        pretrained: pretrained_weights/swin_tiny_patch4_window7_224.pth
+        pretrained: pretrained/swint-nuimages-pretrained.pth
         qk_scale: null
         qkv_bias: true
         type: SwinTransformer
@@ -998,9 +998,9 @@ model:
           inplace: true
           type: ReLU
         in_channels:
-        - 192
-        - 384
-        - 768
+        - 256
+        - 256
+        - 256
         norm_cfg:
           requires_grad: true
           type: BN2d
@@ -1228,12 +1228,7 @@ model:
         - 0.2
       type: TransFusionHead
   type: CBDESBEVFusion
-  use_cbdes_moe: false
-modelencoders:
-  camera:
-    backbone:
-      init_cfg:
-        checkpoint: pretrained/swint-nuimages-pretrained.pth
+  use_cbdes_moe: true
 momentum_config:
   policy: cyclic
 object_classes:
@@ -1319,7 +1314,7 @@ radar_voxel_size:
 - 0.8
 - 8
 reduce_beams: 32
-resume_from: /home/jiafeiyang/liuailin/bevfusion/train_result/epoch_4.pth
+resume_from: null
 run_dir: train_result
 runner:
   max_epochs: 6
@@ -1484,7 +1479,7 @@ train_pipeline:
   pad_empty_sweeps: true
   reduce_beams: 32
   remove_close: true
-  sweeps_num: 0
+  sweeps_num: 9
   type: LoadPointsFromMultiSweeps
   use_dim: 5
 - compensate_velocity: true

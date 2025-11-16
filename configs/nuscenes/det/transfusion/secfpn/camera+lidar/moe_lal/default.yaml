@@ -21,7 +21,8 @@ model:
         out_indices: [1, 2, 3]
         with_cp: false
         convert_weights: true
-        pretrained: pretrained_weights/swin_tiny_patch4_window7_224.pth
+        # pretrained: pretrained_weights/swin_tiny_patch4_window7_224.pth
+        pretrained: pretrained/swint-nuimages-pretrained.pth
       resnet:
         type: ResNet
         depth: 50
@@ -77,7 +78,8 @@ model:
       neck:
         type: GeneralizedLSSFPN
         # in_channels必须与backbone的out_indices数量匹配
-        in_channels: [192, 384, 768]  # Swin各层输出通道
+        # 使用CBDES MoE时，所有专家输出都被投影到256通道
+        in_channels: [256, 256, 256]  # CBDES MoE输出通道（所有专家统一投影到256）
         out_channels: 256
         start_level: 0
         num_outs: 3
@@ -132,6 +134,11 @@ lr_config: null
 
 optimizer:
   lr: 1.0e-4
+
+optimizer_config:
+  grad_clip:  # 梯度裁剪，防止梯度爆炸
+    max_norm: 35  # 最大梯度范数（L2范数）
+    norm_type: 2  # 使用L2范数
 
 max_epochs: 6
 
