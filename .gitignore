@@ -137,3 +137,5 @@ runs/*
 *.hip
 pretrained/*
 pretrained_weights/*
+train_result/*.pth
+*.pth
