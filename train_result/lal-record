@@ -132,7 +132,7 @@ train_result/20251117_023452.log.json
 # 11.17 bevfusion + moe + lidar / mini数据集  - swin-T在nuscene上预训练权重 修改路由损失权重为0.01
 nohup env CUDA_VISIBLE_DEVICES=0,1 torchpack dist-run -np 2 python tools/train_cbdes_moe.py configs/nuscenes/det/transfusion/secfpn/camera+lidar/moe_lal/convfuser.yaml --load_from pretrained/lidar-only-det.pth --data.samples_per_gpu 1 --run-dir train_result > train_bevfusion_moe.log 2>&1 &
 
-
+nohup env CUDA_VISIBLE_DEVICES=0,1,3 torchpack dist-run -np 3 python tools/train_cbdes_moe.py configs/nuscenes/det/transfusion/secfpn/camera+lidar/moe_lal/convfuser.yaml --load_from pretrained/lidar-only-det.pth --data.samples_per_gpu 1 --run-dir train_result > train_bevfusion_moe.log 2>&1 &
 
 
 
